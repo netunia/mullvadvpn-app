@@ -101,8 +101,6 @@ fn run_service() -> Result<(), String> {
 
     let clean_shutdown = Arc::new(AtomicBool::new(false));
 
-    let log_dir = crate::get_log_dir(cli::get_config()).expect("Log dir should be available here");
-
     let runtime = tokio::runtime::Builder::new()
         .threaded_scheduler()
         .enable_all()
@@ -117,23 +115,27 @@ fn run_service() -> Result<(), String> {
         Ok(runtime) => runtime,
     };
 
-    let result = runtime
-        .block_on(crate::create_daemon(log_dir))
-        .and_then(|daemon| {
-            let shutdown_handle = daemon.shutdown_handle();
+    let log_dir = crate::get_log_dir(cli::get_config()).expect("Log dir should be available here");
+    let result = runtime.block_on(crate::create_daemon(log_dir));
+    let result = if let Ok(daemon) = result {
+        let shutdown_handle = daemon.shutdown_handle();
 
-            // Register monitor that translates `ServiceControl` to Daemon events
-            start_event_monitor(
-                persistent_service_status.clone(),
-                shutdown_handle,
-                event_rx,
-                clean_shutdown.clone(),
-            );
+        // Register monitor that translates `ServiceControl` to Daemon events
+        start_event_monitor(
+            persistent_service_status.clone(),
+            shutdown_handle,
+            event_rx,
+            clean_shutdown.clone(),
+        );
 
-            persistent_service_status.set_running().unwrap();
+        persistent_service_status.set_running().unwrap();
 
-            daemon.run().map_err(|e| e.display_chain())
-        });
+        runtime
+            .block_on(daemon.run())
+            .map_err(|e| e.display_chain())
+    } else {
+        result.map(|_| ())
+    };
 
     let exit_code = match result {
         Ok(()) => {
