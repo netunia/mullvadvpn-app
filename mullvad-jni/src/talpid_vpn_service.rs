@@ -52,7 +52,7 @@ pub extern "system" fn Java_net_mullvad_talpid_TalpidVpnService_waitForTunnelUp(
     tunFd: jint,
     isIpv6Enabled: jboolean,
 ) {
-    let tun_fd = tunFd as RawFd;
+    let tun_fd: RawFd = tunFd;
     let is_ipv6_enabled = isIpv6Enabled != JNI_FALSE;
 
     if let Err(error) = wait_for_tunnel_up(tun_fd, is_ipv6_enabled) {
