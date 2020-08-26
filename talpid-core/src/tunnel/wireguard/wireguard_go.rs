@@ -73,7 +73,7 @@ impl WgGoTunnel {
         let handle = unsafe {
             wgTurnOn(
                 config.mtu as isize,
-                wg_config_str.as_ptr() as *const i8,
+                wg_config_str.as_ptr(),
                 tunnel_fd,
                 Some(logging_callback),
                 logging_context.0 as *mut libc::c_void,

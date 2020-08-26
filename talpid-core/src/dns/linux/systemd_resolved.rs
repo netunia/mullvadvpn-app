@@ -199,9 +199,9 @@ impl SystemdResolved {
 
         let msg = Message::new_method_call(
             RESOLVED_BUS,
-            link_object_path as &str,
-            &LINK_INTERFACE as &str,
-            &SET_DOMAINS_METHOD as &str,
+            link_object_path,
+            &*LINK_INTERFACE,
+            &*SET_DOMAINS_METHOD,
         )
         .expect("failed to construct a new dbus message")
         .append1(dns_domains);
