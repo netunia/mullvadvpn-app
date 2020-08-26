@@ -3,7 +3,7 @@
 set -eux
 
 RUST_TOOLCHAIN_CHANNEL=$1
-export RUSTFLAGS="--deny warnings"
+export RUSTFLAGS="--deny warnings --deny trivial-casts --deny trivial-numeric-casts"
 
 source env.sh
 
