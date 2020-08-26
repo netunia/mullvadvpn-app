@@ -35,7 +35,7 @@ impl Sid {
                 0,
                 0,
                 0,
-                &mut sid.sid_ptr as *mut _,
+                &mut sid.sid_ptr,
             )
         };
         if result != 0 {
@@ -133,13 +133,13 @@ pub fn deny_network_access<T: AsRef<OsStr>>(ipc_path: T) -> Result<(), io::Error
 
     let mut ace_entries = vec![network_access, network_svc_access, world_access];
 
-    let mut new_dacl: PACL = unsafe { std::mem::zeroed() };
+    let mut new_dacl: PACL = ptr::null_mut();
     let result = unsafe {
         SetEntriesInAclW(
             ace_entries.len() as u32,
             ace_entries.as_mut_ptr(),
             ptr::null_mut(),
-            &mut new_dacl as *mut PACL,
+            &mut new_dacl,
         )
     };
     if result != ERROR_SUCCESS {
@@ -153,7 +153,7 @@ pub fn deny_network_access<T: AsRef<OsStr>>(ipc_path: T) -> Result<(), io::Error
             DACL_SECURITY_INFORMATION,
             ptr::null_mut(),
             ptr::null_mut(),
-            new_dacl as *mut ACL,
+            new_dacl,
             ptr::null_mut(),
         )
     };
