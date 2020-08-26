@@ -97,9 +97,8 @@ pub fn enable_ipv6_for_adapter(interface_guid: &str) -> Result<(), Error> {
 /// Dynamically determines the alias of the TAP adapter.
 pub fn get_tap_interface_alias() -> Result<OsString, Error> {
     let mut alias_ptr: *mut wchar_t = ptr::null_mut();
-    let status = unsafe {
-        WinNet_GetTapInterfaceAlias(&mut alias_ptr as *mut _, Some(log_sink), logging_context())
-    };
+    let status =
+        unsafe { WinNet_GetTapInterfaceAlias(&mut alias_ptr, Some(log_sink), logging_context()) };
 
     if !status {
         return Err(Error::GetTapAlias);
@@ -119,7 +118,7 @@ pub fn interface_alias_to_guid(interface_alias: &OsStr) -> Result<String, Error>
     let status = unsafe {
         WinNet_InterfaceAliasToGuid(
             interface_alias.as_ptr(),
-            &mut guid_ptr as *mut _,
+            &mut guid_ptr,
             Some(log_sink),
             logging_context(),
         )
@@ -331,10 +330,9 @@ pub fn add_default_route_change_callback<T: 'static>(
 ) -> std::result::Result<WinNetCallbackHandle, DefaultRouteCallbackError> {
     let mut handle_ptr = ptr::null_mut();
     let mut context = Box::new(context);
-    let ctx_ptr = &mut *context as *mut T as *mut libc::c_void;
+    let ctx_ptr = context.as_mut() as *mut _ as *mut libc::c_void;
     unsafe {
-        if !WinNet_RegisterDefaultRouteChangedCallback(callback, ctx_ptr, &mut handle_ptr as *mut _)
-        {
+        if !WinNet_RegisterDefaultRouteChangedCallback(callback, ctx_ptr, &mut handle_ptr) {
             return Err(DefaultRouteCallbackError);
         }
 

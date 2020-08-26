@@ -175,8 +175,7 @@ impl WgGoTunnel {
                 let iface_luid = NET_LUID {
                     Value: interface_luid,
                 };
-                let status =
-                    ConvertInterfaceLuidToIndex(&iface_luid as *const _, &mut iface_idx as *mut _);
+                let status = ConvertInterfaceLuidToIndex(&iface_luid, &mut iface_idx);
                 if status != 0 {
                     log::error!(
                         "Failed to convert interface LUID to interface index - {} - {}",
