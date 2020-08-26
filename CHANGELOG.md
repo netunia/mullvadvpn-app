@@ -47,6 +47,8 @@ Line wrap the file at 100 chars.                                              Th
 - Fix crash that could happen when leaving the Select Location screen.
 - Don't show out-of-time notification for newly created accounts.
 
+#### Linux
+- Add support for WireGuard's kernel module if it's loaded.
 
 ## [2020.6-beta1] - 2020-08-20
 ### Added
