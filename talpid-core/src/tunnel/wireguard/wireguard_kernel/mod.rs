@@ -4,7 +4,7 @@ use netlink_packet_route::{
     rtnl::{
         address::nlas::Nla as AddressNla,
         link::nlas::{Info, InfoKind, Nla as LinkNla},
-        AddressMessage, LinkMessage, RtnlMessage,
+        AddressMessage, LinkMessage, RtnlMessage, RT_SCOPE_UNIVERSE,
     },
     NetlinkMessage, NetlinkPayload,
 };
@@ -25,12 +25,16 @@ use nl_message::{ControlNla, NetlinkControlMessage};
 
 
 #[derive(err_derive::Error, Debug)]
+#[error(no_from)]
 pub enum Error {
     #[error(display = "Failed to decode netlink message")]
     DecodeError(#[error(source)] DecodeError),
 
+    #[error(display = "Failed to execute netlink control request")]
+    NetlinkControlMessageError(#[error(source)] nl_message::Error),
+
     #[error(display = "WireGuard netlink interface unavailable. Is the kernel module loaded?")]
-    WireguardNetlinkINterfaceNotAvailable,
+    WireguardNetlinkInterfaceUnavailable,
 
     #[error(display = "Unknown WireGuard command _0")]
     UnnkownWireguardCommmand(u8),
@@ -57,13 +61,10 @@ pub enum Error {
     SendRequestError(#[error(source)] NetlinkError<DeviceMessage>),
 
     #[error(display = "Create device error")]
-    NetlinkCreateDeviceError(rtnetlink::Error),
+    NetlinkCreateDeviceError(#[error(source)] rtnetlink::Error),
 
     #[error(display = "Add IP to device error")]
     NetlinkSetIpError(rtnetlink::Error),
-
-    #[error(display = "Netlink control interface error")]
-    NetlinkControlInterfaceError(#[error(source)] nl_message::Error),
 
     #[error(display = "Failed to delete device")]
     DeleteDeviceError(#[error(source)] rtnetlink::Error),
@@ -85,21 +86,43 @@ impl KernelTunnel {
                 .create_device(MULLVAD_INTERFACE_NAME.to_string(), config.mtu as u32)
                 .await?;
 
-            netlink_connections
-                .set_config(interface_index, config)
-                .await?;
-            for tunnel_ip in config.tunnel.addresses.iter() {
-                netlink_connections
-                    .set_ip_address(interface_index, *tunnel_ip)
-                    .await?;
-            }
-
-            Ok(Self {
+            let mut tunnel = Self {
                 interface_index,
                 netlink_connections,
                 tokio_handle,
-            })
+            };
+
+            if let Err(err) = tunnel.setup(config).await {
+                if let Err(teardown_err) = tunnel
+                    .netlink_connections
+                    .delete_device(interface_index)
+                    .await
+                {
+                    log::error!(
+                        "Failed to tear down WireGuard interface after failing to apply config: {}",
+                        teardown_err
+                    );
+                }
+                return Err(err);
+            }
+
+
+            Ok(tunnel)
         })
+    }
+
+    async fn setup(&mut self, config: &Config) -> Result<(), Error> {
+        self.netlink_connections
+            .set_config(self.interface_index, config)
+            .await?;
+
+        for tunnel_ip in config.tunnel.addresses.iter() {
+            self.netlink_connections
+                .set_ip_address(self.interface_index, *tunnel_ip)
+                .await?;
+        }
+
+        Ok(())
     }
 }
 
@@ -203,7 +226,8 @@ impl Handle {
 
         tokio02::spawn(conn);
         let mut message: NetlinkMessage<NetlinkControlMessage> =
-            NetlinkControlMessage::get_netlink_family_id(CString::new("wireguard").unwrap())?
+            NetlinkControlMessage::get_netlink_family_id(CString::new("wireguard").unwrap())
+                .map_err(Error::NetlinkControlMessageError)?
                 .into();
 
         message.header.flags = NLM_F_REQUEST | NLM_F_ACK;
@@ -222,7 +246,7 @@ impl Handle {
             }
         }
 
-        Err(Error::WireguardNetlinkINterfaceNotAvailable)
+        Err(Error::WireguardNetlinkInterfaceUnavailable)
     }
 
     // create a wireguard device with the given name.
@@ -384,23 +408,27 @@ fn consume_netlink_error<
 // the built-in support for adding addresses is too helpful, so a simple AddressMessage with a
 // single Address nla is created
 fn add_ip_addr_message(if_index: u32, addr: IpAddr) -> AddressMessage {
-    let prefix_len = if addr.is_ipv4() { 32 } else { 64 };
+    let prefix_len = if addr.is_ipv4() { 32 } else { 128 };
     let mut message = AddressMessage::default();
     message.header.prefix_len = prefix_len;
     message.header.index = if_index;
+    message.header.scope = RT_SCOPE_UNIVERSE;
 
-    let address_vec = match addr {
+    match addr {
         IpAddr::V4(ipv4) => {
             message.header.family = libc::AF_INET as u8;
-            ipv4.octets().to_vec()
+            let ip_bytes = ipv4.octets().to_vec();
+
+            message.nlas.push(AddressNla::Address(ip_bytes.clone()));
+            message.nlas.push(AddressNla::Local(ip_bytes));
         }
         IpAddr::V6(ipv6) => {
             message.header.family = libc::AF_INET6 as u8;
-            ipv6.octets().to_vec()
+            message
+                .nlas
+                .push(AddressNla::Address(ipv6.octets().to_vec()));
         }
     };
-
-    message.nlas.push(AddressNla::Address(address_vec));
 
     message
 }

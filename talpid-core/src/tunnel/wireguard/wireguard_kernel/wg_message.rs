@@ -92,6 +92,8 @@ impl DeviceMessage {
 
         let nlas = vec![
             DeviceNla::IfIndex(interface_index),
+            DeviceNla::ListenPort(0),
+            DeviceNla::Fwmark(1836018789),
             DeviceNla::PrivateKey(config.tunnel.private_key.to_bytes()),
             DeviceNla::Flags(WGDEVICE_F_REPLACE_PEERS),
             DeviceNla::Peers(peers),
@@ -173,7 +175,9 @@ impl NetlinkDeserializable<DeviceMessage> for DeviceMessage {
         let new_payload = &payload[mem::size_of::<libc::genlmsghdr>()..];
         let mut nlas = vec![];
         for buf in NlasIterator::new(new_payload) {
-            nlas.push(DeviceNla::parse(&buf?)?);
+            nlas.push(
+                DeviceNla::parse(&buf.map_err(Error::DecodeError)?).map_err(Error::DecodeError)?,
+            );
         }
 
         Ok(DeviceMessage {
