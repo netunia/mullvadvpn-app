@@ -512,6 +512,15 @@ impl<'a> PolicyBatch<'a> {
         add_verdict(&mut out_rule, &Verdict::Accept);
 
         self.batch.add(&out_rule, nftnl::MsgType::Add);
+
+        let mut wg_out_rule = Rule::new(&self.out_chain);
+        check_endpoint(&mut wg_out_rule, End::Dst, endpoint);
+        wg_out_rule.add_expr(&nft_expr!(meta mark));
+        // 1836018789 is b"mole"
+        wg_out_rule.add_expr(&nft_expr!(cmp == 1836018789));
+        add_verdict(&mut wg_out_rule, &Verdict::Accept);
+
+        self.batch.add(&wg_out_rule, nftnl::MsgType::Add);
     }
 
     fn add_allow_icmp_pingable_hosts(&mut self, pingable_hosts: &[IpAddr]) {
